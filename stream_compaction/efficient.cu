@@ -11,6 +11,7 @@ namespace StreamCompaction {
             static PerformanceTimer timer;
             return timer;
         }
+        float total_time = 0.0;
 
         __global__ void kernUpSweep(int n, int* idata, int d) {
             int k = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -58,7 +59,6 @@ namespace StreamCompaction {
 
             const int blockSize = 128;
 			
-			printf("starting upsweep\n");
 
             for (int d = 0; d <= ilog2ceil(new_n)-1; ++d) {
 				int num_threads = new_n / (1 << (d + 1));
@@ -66,7 +66,6 @@ namespace StreamCompaction {
 				kernUpSweep<<<fullBlocksPerGrid, blockSize>>>(new_n, dev_idata, d);
 				cudaDeviceSynchronize();
             }
-			printf("upsweep done\n");
 
 			cudaMemset(dev_idata + new_n - 1, 0, sizeof(int));
 
@@ -76,7 +75,6 @@ namespace StreamCompaction {
                 kernDownSweep<<<fullBlocksPerGrid, blockSize>>>(new_n, dev_idata, d);
                 cudaDeviceSynchronize();
             }
-			printf("downsweep done\n");
 
             timer().endGpuTimer();
 
@@ -95,6 +93,7 @@ namespace StreamCompaction {
          */
         int compact(int n, int *odata, const int *idata) {
             // TODO
+            int new_n = 1 << ilog2ceil(n);
             int* dev_idata;
 			int* dev_odata;
             int* dev_bools;
@@ -102,7 +101,7 @@ namespace StreamCompaction {
             cudaMalloc((void**)&dev_idata, n * sizeof(int));
 			cudaMalloc((void**)&dev_odata, n * sizeof(int));
             cudaMalloc((void**)&dev_bools, n * sizeof(int));
-			cudaMalloc((void**)&dev_indices, n * sizeof(int));
+			cudaMalloc((void**)&dev_indices, new_n * sizeof(int));
 			cudaMemcpy(dev_idata, idata, n * sizeof(int), cudaMemcpyHostToDevice);
 
             timer().startGpuTimer();
@@ -111,7 +110,28 @@ namespace StreamCompaction {
             dim3 fullBlocksPerGrid((n + blockSize - 1) / blockSize);
             StreamCompaction::Common::kernMapToBoolean<<<fullBlocksPerGrid, blockSize>>>(n, dev_bools, dev_idata);
 			cudaDeviceSynchronize();
-			scan(n, dev_indices, dev_bools);
+
+            cudaMemcpy(dev_indices, dev_bools, n * sizeof(int), cudaMemcpyHostToDevice);
+            cudaMemset(dev_indices + n, 0, (new_n - n) * sizeof(int));
+
+            //scan(n, dev_indices, dev_bools);
+            for (int d = 0; d <= ilog2ceil(new_n) - 1; ++d) {
+                int num_threads = new_n / (1 << (d + 1));
+                dim3 fullBlocksPerGrid((num_threads + blockSize - 1) / blockSize);
+                kernUpSweep<<<fullBlocksPerGrid, blockSize>>>(new_n, dev_indices, d);
+                cudaDeviceSynchronize();
+            }
+
+            cudaMemset(dev_indices + new_n - 1, 0, sizeof(int));
+
+            for (int d = ilog2ceil(new_n) - 1; d >= 0; --d) {
+                int num_threads = new_n / (1 << (d + 1));
+                dim3 fullBlocksPerGrid((num_threads + blockSize - 1) / blockSize);
+                kernDownSweep<<<fullBlocksPerGrid, blockSize>>>(new_n, dev_indices, d);
+                cudaDeviceSynchronize();
+            }
+
+
 			StreamCompaction::Common::kernScatter<<<fullBlocksPerGrid, blockSize>>>(n, dev_odata, dev_idata, dev_bools, dev_indices);
 			cudaDeviceSynchronize();
 
