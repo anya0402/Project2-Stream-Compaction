@@ -1,4 +1,6 @@
 #include <cstdio>
+#include <iostream>
+
 #include "cpu.h"
 
 #include "common.h"
@@ -20,6 +22,10 @@ namespace StreamCompaction {
         void scan(int n, int *odata, const int *idata) {
             timer().startCpuTimer();
             // TODO
+            odata[0] = 0;
+            for (int i = 1; i < n; ++i) {
+                odata[i] = odata[i - 1] + idata[i-1];
+            }
             timer().endCpuTimer();
         }
 
@@ -31,8 +37,16 @@ namespace StreamCompaction {
         int compactWithoutScan(int n, int *odata, const int *idata) {
             timer().startCpuTimer();
             // TODO
+            int next = 0;
+            for (int i = 0; i < n; ++i) {
+                int curr_val = idata[i];
+                if (curr_val != 0) {
+                    odata[next] = curr_val;
+                    next += 1;
+                }
+            }
             timer().endCpuTimer();
-            return -1;
+            return next;
         }
 
         /**
@@ -43,8 +57,31 @@ namespace StreamCompaction {
         int compactWithScan(int n, int *odata, const int *idata) {
             timer().startCpuTimer();
             // TODO
+            int* bool_array = new int[n];
+            int* scan_result =  new int[n];
+            for (int i = 0; i < n; ++i) {
+                int curr_val = idata[i];
+                if (curr_val) {
+                    bool_array[i] = 1;
+                }
+                else {
+                    bool_array[i] = 0;
+                }
+            }
+            scan_result[0] = 0;
+            for (int i = 1; i < n; ++i) {
+                scan_result[i] = scan_result[i - 1] + bool_array[i - 1];
+            }
+            for (int i = 0; i < n; ++i) {
+                if (bool_array[i]) {
+                    odata[scan_result[i]] = idata[i];
+                }
+            }
+            int final_num = scan_result[n - 1] + bool_array[n - 1];
+            delete[] bool_array;
+            delete[] scan_result;
             timer().endCpuTimer();
-            return -1;
+            return final_num;
         }
     }
 }
