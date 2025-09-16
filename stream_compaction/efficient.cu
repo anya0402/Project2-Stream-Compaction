@@ -11,7 +11,7 @@ namespace StreamCompaction {
             static PerformanceTimer timer;
             return timer;
         }
-        float total_time = 0.0;
+		const int blockSize = 128;
 
         __global__ void kernUpSweep(int n, int* idata, int d) {
             int k = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -57,9 +57,8 @@ namespace StreamCompaction {
 
             timer().startGpuTimer();
 
-            const int blockSize = 128;
+            //const int blockSize = 128;
 			
-
             for (int d = 0; d <= ilog2ceil(new_n)-1; ++d) {
 				int num_threads = new_n / (1 << (d + 1));
                 dim3 fullBlocksPerGrid((num_threads + blockSize - 1) / blockSize);
@@ -106,7 +105,7 @@ namespace StreamCompaction {
 
             timer().startGpuTimer();
 
-            const int blockSize = 128;
+            //const int blockSize = 128;
             dim3 fullBlocksPerGrid((n + blockSize - 1) / blockSize);
             StreamCompaction::Common::kernMapToBoolean<<<fullBlocksPerGrid, blockSize>>>(n, dev_bools, dev_idata);
 			cudaDeviceSynchronize();
